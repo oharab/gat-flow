@@ -44,6 +44,12 @@ def cli(ctx, config: Optional[str], oauth2_credentials: Optional[str],
     ctx.obj["config"] = cfg
     ctx.obj["user_email"] = user
     
+    # Skip authentication initialization for setup and init commands
+    if ctx.invoked_subcommand in ['setup', 'init']:
+        ctx.obj["auth"] = None
+        ctx.obj["gmail"] = None
+        return
+    
     try:
         # Initialize authentication based on mode
         if auth_mode == 'oauth2':
@@ -271,6 +277,122 @@ def info(ctx):
     click.echo(f"Required Scopes: {', '.join(auth.SCOPES)}")
     
     click.echo("=" * 35)
+
+
+@cli.command()
+@click.option("--type", "-t", type=click.Choice(['oauth2', 'service-account', 'both']), 
+              default='both', help="Type of authentication setup to show")
+@click.pass_context
+def setup(ctx, type: str):
+    """Show detailed instructions for setting up authentication files."""
+    
+    click.echo("\n" + "=" * 60)
+    click.echo("🔧 GOOGLE API AUTHENTICATION SETUP INSTRUCTIONS")
+    click.echo("=" * 60)
+    
+    if type in ['oauth2', 'both']:
+        click.echo("\n📱 OAUTH2 SETUP (Personal Account Management)")
+        click.echo("-" * 50)
+        click.echo("Use this method to manage your own Gmail vacation settings.")
+        click.echo()
+        
+        click.echo("1️⃣  CREATE GOOGLE CLOUD PROJECT:")
+        click.echo("   • Go to: https://console.cloud.google.com")
+        click.echo("   • Click 'Select a project' → 'New Project'")
+        click.echo("   • Enter project name → Click 'Create'")
+        click.echo()
+        
+        click.echo("2️⃣  ENABLE GMAIL API:")
+        click.echo("   • In Google Cloud Console, go to 'APIs & Services' → 'Library'")
+        click.echo("   • Search for 'Gmail API' → Click on it")
+        click.echo("   • Click 'Enable'")
+        click.echo()
+        
+        click.echo("3️⃣  CREATE OAUTH2 CREDENTIALS:")
+        click.echo("   • Go to 'APIs & Services' → 'Credentials'")
+        click.echo("   • Click '+ CREATE CREDENTIALS' → 'OAuth client ID'")
+        click.echo("   • If prompted, configure OAuth consent screen:")
+        click.echo("     - User Type: External (or Internal for Workspace)")
+        click.echo("     - Fill required fields, add your email as test user")
+        click.echo("   • Application type: 'Desktop application'")
+        click.echo("   • Name: 'Gmail Vacation Manager' (or your choice)")
+        click.echo("   • Click 'Create'")
+        click.echo()
+        
+        click.echo("4️⃣  DOWNLOAD CREDENTIALS:")
+        click.echo("   • Click the download button (⬇️) next to your OAuth client")
+        click.echo("   • Save the JSON file as 'credentials.json' in this directory")
+        click.echo()
+        
+        click.echo("✅ OAuth2 Setup Complete!")
+        click.echo("   Run: python main.py status")
+        click.echo("   (This will open your browser for first-time authentication)")
+        
+    if type in ['service-account', 'both']:
+        if type == 'both':
+            click.echo("\n" + "=" * 60)
+        
+        click.echo("\n🏢 SERVICE ACCOUNT SETUP (Domain-Wide Management)")
+        click.echo("-" * 55)
+        click.echo("Use this method to manage vacation settings for any user in your domain.")
+        click.echo("⚠️  Requires Google Workspace admin privileges!")
+        click.echo()
+        
+        click.echo("1️⃣  CREATE SERVICE ACCOUNT:")
+        click.echo("   • In Google Cloud Console, go to 'IAM & Admin' → 'Service Accounts'")
+        click.echo("   • Click '+ CREATE SERVICE ACCOUNT'")
+        click.echo("   • Name: 'gmail-vacation-manager' (or your choice)")
+        click.echo("   • Description: 'Manages Gmail vacation responders'")
+        click.echo("   • Click 'Create and Continue' → 'Done'")
+        click.echo()
+        
+        click.echo("2️⃣  GENERATE SERVICE ACCOUNT KEY:")
+        click.echo("   • Click on the service account you just created")
+        click.echo("   • Go to 'Keys' tab → 'ADD KEY' → 'Create new key'")
+        click.echo("   • Key type: JSON → Click 'Create'")
+        click.echo("   • Save the JSON file as 'service-account-key.json' in this directory")
+        click.echo()
+        
+        click.echo("3️⃣  ENABLE DOMAIN-WIDE DELEGATION:")
+        click.echo("   • In the service account details, check 'Enable G Suite Domain-wide Delegation'")
+        click.echo("   • Product name: 'Gmail Vacation Manager'")
+        click.echo("   • Click 'Save'")
+        click.echo("   • Copy the 'Client ID' (you'll need it in step 4)")
+        click.echo()
+        
+        click.echo("4️⃣  CONFIGURE DOMAIN-WIDE DELEGATION (Google Workspace Admin):")
+        click.echo("   • Go to: https://admin.google.com")
+        click.echo("   • Navigate to: Security → API Controls → Domain-wide Delegation")
+        click.echo("   • Click 'Add new' → Enter the Client ID from step 3")
+        click.echo("   • OAuth Scopes: https://www.googleapis.com/auth/gmail.settings.basic")
+        click.echo("   • Click 'Authorize'")
+        click.echo()
+        
+        click.echo("✅ Service Account Setup Complete!")
+        click.echo("   Run: python main.py --service-account service-account-key.json --user user@domain.com status")
+    
+    click.echo("\n" + "=" * 60)
+    click.echo("📂 EXPECTED FILES IN PROJECT DIRECTORY:")
+    click.echo("-" * 40)
+    if type in ['oauth2', 'both']:
+        click.echo("• credentials.json          (OAuth2 client credentials)")
+        click.echo("• token.json               (Auto-generated after first OAuth2 login)")
+    if type in ['service-account', 'both']:
+        click.echo("• service-account-key.json (Service account private key)")
+    click.echo()
+    
+    click.echo("🔍 VERIFICATION:")
+    click.echo("-" * 15)
+    click.echo("• Run 'python main.py info' to see current authentication status")
+    click.echo("• Use 'python main.py --auth-mode auto' to auto-detect authentication method")
+    click.echo()
+    
+    click.echo("❓ NEED HELP?")
+    click.echo("-" * 12)
+    click.echo("• OAuth2 issues: Make sure Gmail API is enabled and OAuth consent is configured")
+    click.echo("• Service Account issues: Verify domain-wide delegation is properly configured")
+    click.echo("• Both: Check that JSON files are valid and in the correct directory")
+    click.echo("\n" + "=" * 60)
 
 
 def main():

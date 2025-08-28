@@ -61,11 +61,28 @@ class GoogleAuth:
                     "Please download it from Google Cloud Console."
                 )
             
+            print("🔐 Authentication required for Google Gmail API access")
+            print("📋 Required permissions: Gmail settings management")
+            print("🌐 Opening browser for Google OAuth2 authentication...")
+            print("   - Please sign in with your Google Workspace account")
+            print("   - Grant permission to manage Gmail vacation settings")
+            print("   - Close the browser tab when authentication is complete")
+            print()
+            
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(self.credentials_file), self.SCOPES
             )
-            self._creds = flow.run_local_server(port=0)
+            
+            # Force browser authentication with explicit parameters
+            self._creds = flow.run_local_server(
+                port=0,
+                authorization_prompt_message="Please visit this URL to authorize the application: {url}",
+                success_message="Authentication successful! You can close this tab.",
+                open_browser=True
+            )
+            
             self._save_token()
+            print("✅ Authentication successful! Token saved for future use.")
         
         return self._creds
     
@@ -75,6 +92,23 @@ class GoogleAuth:
             with open(self.token_file, "w") as token:
                 token.write(self._creds.to_json())
     
+    def force_reauthentication(self) -> Credentials:
+        """Force re-authentication by clearing existing credentials.
+        
+        Returns:
+            Fresh Google OAuth2 credentials object
+        """
+        print("🔄 Forcing re-authentication...")
+        
+        # Clear existing credentials
+        self._creds = None
+        if self.token_file.exists():
+            os.remove(self.token_file)
+            print(f"Removed existing token file: {self.token_file}")
+        
+        # Re-authenticate
+        return self.authenticate()
+    
     def revoke_token(self) -> bool:
         """Revoke the current token and delete token file.
         
@@ -82,14 +116,18 @@ class GoogleAuth:
             True if token was successfully revoked, False otherwise
         """
         if not self._creds:
+            print("No active credentials to revoke.")
             return False
         
         try:
+            print("🔓 Revoking Google API access token...")
             self._creds.revoke(Request())
             if self.token_file.exists():
                 os.remove(self.token_file)
+                print(f"Removed token file: {self.token_file}")
             self._creds = None
+            print("✅ Token revoked successfully!")
             return True
         except Exception as e:
-            print(f"Failed to revoke token: {e}")
+            print(f"❌ Failed to revoke token: {e}")
             return False

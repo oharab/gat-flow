@@ -163,6 +163,19 @@ def revoke(ctx):
         click.echo("✗ Failed to revoke tokens or no tokens found.")
 
 
+@cli.command()
+@click.pass_context
+def reauth(ctx):
+    """Force re-authentication with browser login."""
+    auth = ctx.obj["auth"]
+    
+    try:
+        auth.force_reauthentication()
+        click.echo("✓ Re-authentication completed successfully!")
+    except Exception as e:
+        click.echo(f"✗ Re-authentication failed: {e}")
+
+
 def main():
     """Main entry point."""
     try:

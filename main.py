@@ -1,6 +1,7 @@
 """Entry point script for managing Google Workspace out-of-office messages."""
 
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -247,6 +248,127 @@ def init(ctx, file: str):
     """Create sample configuration file."""
     config = ctx.obj["config"]
     config.create_sample_env_file(file)
+
+
+@cli.command()
+@click.option("--name", required=True, help="Template name (e.g., 'remote', 'meeting')")
+@click.option("--subject", required=True, help="Subject line for the template")
+@click.option("--message", required=True, help="Message body for the template")
+@click.option("--file", "-f", default=".env", help="Environment file to update")
+@click.pass_context
+def add_template(ctx, name: str, subject: str, message: str, file: str):
+    """Add a custom vacation message template."""
+    
+    # Validate template name
+    if not name.replace('_', '').replace('-', '').isalnum():
+        click.echo("❌ Template name must contain only letters, numbers, hyphens, and underscores.")
+        return
+    
+    template_name = name.upper().replace('-', '_')
+    subject_var = f"CUSTOM_TEMPLATE_{template_name}_SUBJECT"
+    message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
+    
+    try:
+        # Read existing .env file or create new one
+        env_path = Path(file)
+        existing_content = ""
+        if env_path.exists():
+            with open(env_path, 'r') as f:
+                existing_content = f.read()
+        
+        # Check if template already exists
+        if subject_var in existing_content:
+            if not click.confirm(f"Template '{name}' already exists. Overwrite?"):
+                click.echo("❌ Template creation cancelled.")
+                return
+            
+            # Remove existing template lines
+            lines = existing_content.split('\n')
+            filtered_lines = []
+            for line in lines:
+                if not (line.startswith(subject_var + '=') or line.startswith(message_var + '=')):
+                    filtered_lines.append(line)
+            existing_content = '\n'.join(filtered_lines)
+        
+        # Add new template
+        template_content = f"""
+# Custom Template: {name}
+{subject_var}={subject}
+{message_var}={message}
+"""
+        
+        # Write updated content
+        with open(env_path, 'w') as f:
+            f.write(existing_content.rstrip() + template_content)
+        
+        click.echo(f"✅ Custom template '{name}' added to {file}")
+        click.echo(f"📝 Use it with: python main.py set --template {name.lower()}")
+        click.echo(f"ℹ️  Restart the application or reload environment to use the new template.")
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to add template: {e}")
+
+
+@cli.command()
+@click.option("--name", required=True, help="Template name to remove")
+@click.option("--file", "-f", default=".env", help="Environment file to update")
+@click.pass_context
+def remove_template(ctx, name: str, file: str):
+    """Remove a custom vacation message template."""
+    
+    template_name = name.upper().replace('-', '_')
+    subject_var = f"CUSTOM_TEMPLATE_{template_name}_SUBJECT"
+    message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
+    
+    try:
+        env_path = Path(file)
+        if not env_path.exists():
+            click.echo(f"❌ Environment file {file} not found.")
+            return
+        
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+        
+        # Remove template lines
+        filtered_lines = []
+        found_template = False
+        skip_next_comment = False
+        
+        for line in lines:
+            line_stripped = line.strip()
+            
+            # Skip comment line before template if it matches
+            if line_stripped == f"# Custom Template: {name}":
+                skip_next_comment = True
+                found_template = True
+                continue
+            
+            # Skip template variable lines
+            if (line_stripped.startswith(subject_var + '=') or 
+                line_stripped.startswith(message_var + '=')):
+                found_template = True
+                continue
+            
+            # Skip empty line after template
+            if skip_next_comment and line_stripped == "":
+                skip_next_comment = False
+                continue
+            
+            skip_next_comment = False
+            filtered_lines.append(line)
+        
+        if not found_template:
+            click.echo(f"❌ Template '{name}' not found in {file}")
+            return
+        
+        # Write updated content
+        with open(env_path, 'w') as f:
+            f.writelines(filtered_lines)
+        
+        click.echo(f"✅ Custom template '{name}' removed from {file}")
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to remove template: {e}")
 
 
 @cli.command()

@@ -60,8 +60,8 @@ class Config:
         return os.getenv("DEFAULT_DOMAIN_ONLY", "false").lower() == "true"
     
     def get_message_templates(self) -> Dict[str, Dict[str, str]]:
-        """Get predefined message templates."""
-        return {
+        """Get predefined message templates plus any custom templates."""
+        templates = {
             "vacation": {
                 "subject": "Out of Office - On Vacation",
                 "message": (
@@ -105,6 +105,26 @@ class Config:
                 )
             }
         }
+        
+        # Add custom templates from environment variables
+        # Format: CUSTOM_TEMPLATE_<NAME>_SUBJECT and CUSTOM_TEMPLATE_<NAME>_MESSAGE
+        import re
+        for key, value in os.environ.items():
+            if key.startswith("CUSTOM_TEMPLATE_") and key.endswith("_SUBJECT"):
+                # Extract template name (e.g., CUSTOM_TEMPLATE_REMOTE_SUBJECT -> remote)
+                match = re.match(r"CUSTOM_TEMPLATE_(.+)_SUBJECT", key)
+                if match:
+                    template_name = match.group(1).lower()
+                    message_key = f"CUSTOM_TEMPLATE_{match.group(1)}_MESSAGE"
+                    message = os.getenv(message_key)
+                    
+                    if message:  # Only add if both subject and message are defined
+                        templates[template_name] = {
+                            "subject": value,
+                            "message": message
+                        }
+        
+        return templates
     
     def create_sample_env_file(self, file_path: str = ".env.example") -> None:
         """Create a sample environment file with configuration options.

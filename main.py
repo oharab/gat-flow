@@ -10,6 +10,25 @@ from config import Config
 from gmail_api import GmailVacationManager
 
 
+def _get_gmail_manager_for_user(ctx, user: Optional[str]) -> GmailVacationManager:
+    """Get Gmail manager for specified user, with service account validation."""
+    auth_handler = ctx.obj["auth"]
+    target_user = user or ctx.obj["user_email"]
+    
+    # Validate that service account has a target user
+    if isinstance(auth_handler, ServiceAccountAuth) and not target_user:
+        raise click.ClickException(
+            "Service Account mode requires specifying a user to manage.\n"
+            "Use --user email@domain.com or set it globally before the command."
+        )
+    
+    # Create Gmail manager with appropriate user
+    if target_user != ctx.obj["user_email"]:
+        return GmailVacationManager(auth_handler, target_user)
+    else:
+        return ctx.obj["gmail"]
+
+
 @click.group()
 @click.option("--config", "-c", help="Path to configuration file (.env)")
 @click.option("--oauth2-credentials", help="Path to OAuth2 credentials JSON file")
@@ -69,12 +88,6 @@ def cli(ctx, config: Optional[str], oauth2_credentials: Optional[str],
         ctx.obj["auth"] = auth_handler
         ctx.obj["gmail"] = GmailVacationManager(auth_handler, user)
         
-        # Validation for service account mode
-        if isinstance(auth_handler, ServiceAccountAuth) and not user:
-            click.echo("⚠️  Service Account detected but no --user specified.")
-            click.echo("   Service accounts can manage any domain user's settings.")
-            click.echo("   Use --user email@domain.com to specify which user to manage.")
-        
     except AuthenticationError as e:
         click.echo(f"❌ Authentication Error: {e}")
         ctx.exit(1)
@@ -99,14 +112,11 @@ def set(ctx, subject: Optional[str], message: Optional[str], template: Optional[
     """Set vacation responder message."""
     config = ctx.obj["config"]
     
-    # Use command-specific user if provided, otherwise use global user
-    target_user = user or ctx.obj["user_email"]
-    if target_user != ctx.obj["user_email"]:
-        # Create new Gmail manager with different user
-        auth_handler = ctx.obj["auth"]
-        gmail = GmailVacationManager(auth_handler, target_user)
-    else:
-        gmail = ctx.obj["gmail"]
+    try:
+        gmail = _get_gmail_manager_for_user(ctx, user)
+    except click.ClickException as e:
+        click.echo(f"❌ {e}")
+        return
     
     # Use template if specified
     if template:
@@ -175,14 +185,11 @@ def set(ctx, subject: Optional[str], message: Optional[str], template: Optional[
 @click.pass_context
 def disable(ctx, user: Optional[str]):
     """Disable vacation responder."""
-    # Use command-specific user if provided, otherwise use global user
-    target_user = user or ctx.obj["user_email"]
-    if target_user != ctx.obj["user_email"]:
-        # Create new Gmail manager with different user
-        auth_handler = ctx.obj["auth"]
-        gmail = GmailVacationManager(auth_handler, target_user)
-    else:
-        gmail = ctx.obj["gmail"]
+    try:
+        gmail = _get_gmail_manager_for_user(ctx, user)
+    except click.ClickException as e:
+        click.echo(f"❌ {e}")
+        return
     
     try:
         success = gmail.disable_vacation_message()
@@ -203,14 +210,11 @@ def disable(ctx, user: Optional[str]):
 @click.pass_context
 def status(ctx, user: Optional[str]):
     """Show current vacation responder status."""
-    # Use command-specific user if provided, otherwise use global user
-    target_user = user or ctx.obj["user_email"]
-    if target_user != ctx.obj["user_email"]:
-        # Create new Gmail manager with different user
-        auth_handler = ctx.obj["auth"]
-        gmail = GmailVacationManager(auth_handler, target_user)
-    else:
-        gmail = ctx.obj["gmail"]
+    try:
+        gmail = _get_gmail_manager_for_user(ctx, user)
+    except click.ClickException as e:
+        click.echo(f"❌ {e}")
+        return
     
     try:
         gmail.print_vacation_status()

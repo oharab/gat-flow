@@ -6,28 +6,38 @@ from typing import Dict, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from auth import GoogleAuth
+from auth import BaseAuth
 
 
 class GmailVacationManager:
     """Manage Gmail vacation responder settings via Google API."""
     
-    def __init__(self, auth_handler: GoogleAuth):
+    def __init__(self, auth_handler: BaseAuth, user_email: Optional[str] = None):
         """Initialize Gmail API client.
         
         Args:
-            auth_handler: Authenticated Google Auth handler
+            auth_handler: Authentication handler (OAuth2 or Service Account)
+            user_email: Email of user to manage (required for service account)
         """
         self.auth_handler = auth_handler
+        self.user_email = user_email
         self._service = None
+        self._current_user_id = None
     
     @property
     def service(self):
         """Get or create Gmail API service."""
         if not self._service:
-            creds = self.auth_handler.authenticate()
+            creds = self.auth_handler.authenticate(self.user_email)
             self._service = build("gmail", "v1", credentials=creds)
         return self._service
+    
+    @property
+    def user_id(self) -> str:
+        """Get user ID for API calls."""
+        if self.user_email:
+            return self.user_email
+        return "me"
     
     def get_vacation_settings(self) -> Dict:
         """Get current vacation responder settings.
@@ -39,7 +49,7 @@ class GmailVacationManager:
             HttpError: If API request fails
         """
         try:
-            settings = self.service.users().settings().getVacation(userId="me").execute()
+            settings = self.service.users().settings().getVacation(userId=self.user_id).execute()
             return settings
         except HttpError as error:
             print(f"An error occurred getting vacation settings: {error}")
@@ -89,11 +99,12 @@ class GmailVacationManager:
         
         try:
             result = self.service.users().settings().updateVacation(
-                userId="me",
+                userId=self.user_id,
                 body=vacation_settings
             ).execute()
             
-            print(f"Vacation message set successfully.")
+            user_info = f" for {self.user_email}" if self.user_email else ""
+            print(f"Vacation message set successfully{user_info}.")
             if start_time:
                 print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             if end_time:
@@ -117,11 +128,12 @@ class GmailVacationManager:
         
         try:
             self.service.users().settings().updateVacation(
-                userId="me",
+                userId=self.user_id,
                 body=vacation_settings
             ).execute()
             
-            print("Vacation message disabled successfully.")
+            user_info = f" for {self.user_email}" if self.user_email else ""
+            print(f"Vacation message disabled successfully{user_info}.")
             return True
             
         except HttpError as error:
@@ -168,7 +180,8 @@ class GmailVacationManager:
             print("Could not retrieve vacation status.")
             return
         
-        print("\n=== Vacation Responder Status ===")
+        user_info = f" for {self.user_email}" if self.user_email else ""
+        print(f"\n=== Vacation Responder Status{user_info} ===")
         print(f"Enabled: {'Yes' if status.get('enabled') else 'No'}")
         
         if status.get("enabled"):

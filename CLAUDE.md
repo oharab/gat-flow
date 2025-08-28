@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python script for managing out-of-office messages in Google Workspace using Google APIs. The script automates setting vacation responders for user email accounts.
+Python script for managing out-of-office messages in Google Workspace using Google APIs. Supports both OAuth2 authentication (personal accounts) and Service Account authentication (domain-wide delegation) for managing vacation responders across multiple users.
 
 ## Development Commands
 
@@ -12,11 +12,14 @@ Python script for managing out-of-office messages in Google Workspace using Goog
 # Create virtual environment and install dependencies
 uv sync
 
-# Run the script
-uv run python main.py
+# OAuth2 mode (opens browser)
+uv run python main.py status
 
-# Run with specific user
-uv run python main.py --user user@domain.com
+# Service Account mode (manage other users)  
+uv run python main.py --service-account sa-key.json --user john@company.com status
+
+# Auto-detect authentication method
+uv run python main.py --auth-mode auto status
 
 # Run tests
 uv run pytest tests/
@@ -39,21 +42,28 @@ uv run ruff check . && uv run ruff format .
 
 ## Architecture
 
-- **main.py**: Entry point script handling command-line arguments and orchestrating the vacation responder setup
-- **gmail_api.py**: Core Google Gmail API integration for managing vacation settings
-- **auth.py**: Google OAuth2 authentication handling and token management
-- **config.py**: Configuration management for API credentials and default settings
+- **main.py**: Entry point script with CLI interface supporting both OAuth2 and Service Account authentication
+- **gmail_api.py**: Core Google Gmail API integration for managing vacation settings with user impersonation support
+- **auth.py**: Flexible authentication system supporting OAuth2 and Service Account with domain-wide delegation
+- **config.py**: Configuration management for API credentials, templates, and default settings
 
 ## Google API Setup
 
-- Requires Google Cloud Platform project with Gmail API enabled
-- OAuth2 credentials file (credentials.json) needed in project root
-- Service account or user authentication depending on deployment model
-- Scopes required: `https://www.googleapis.com/auth/gmail.settings.basic`
+### OAuth2 Setup (Personal Use)
+- Google Cloud Platform project with Gmail API enabled
+- OAuth2 client credentials file (credentials.json) in project root
+- First run opens browser for authentication, stores refresh token
 
-## Authentication Flow
+### Service Account Setup (Domain-Wide)
+- Service account key file (service-account-key.json) in project root  
+- Domain-wide delegation enabled in Google Workspace Admin Console
+- Required OAuth scopes: `https://www.googleapis.com/auth/gmail.settings.basic`
 
-The script uses OAuth2 flow to authenticate with Google APIs. First run will prompt for browser authentication and store refresh tokens locally for subsequent runs.
+## Authentication Modes
+
+- **OAuth2**: Personal account management via browser authentication
+- **Service Account**: Domain-wide management with user impersonation (no browser required)
+- **Auto-detect**: Automatically selects authentication method based on available files
 
 ## Key Dependencies
 

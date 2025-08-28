@@ -5,33 +5,76 @@ from typing import Optional
 
 import click
 
-from auth import GoogleAuth
+from auth import AuthManager, AuthenticationError, OAuth2Auth, ServiceAccountAuth
 from config import Config
 from gmail_api import GmailVacationManager
 
 
 @click.group()
 @click.option("--config", "-c", help="Path to configuration file (.env)")
-@click.option("--credentials", help="Path to Google credentials JSON file")
-@click.option("--token", help="Path to token file")
+@click.option("--oauth2-credentials", help="Path to OAuth2 credentials JSON file")
+@click.option("--service-account", help="Path to service account key JSON file")
+@click.option("--token", help="Path to OAuth2 token file")
+@click.option("--user", "-u", help="Email of user to manage (required for service account)")
+@click.option("--auth-mode", type=click.Choice(['oauth2', 'service-account', 'auto']), 
+              default='auto', help="Authentication mode to use")
 @click.pass_context
-def cli(ctx, config: Optional[str], credentials: Optional[str], token: Optional[str]):
+def cli(ctx, config: Optional[str], oauth2_credentials: Optional[str], 
+        service_account: Optional[str], token: Optional[str], user: Optional[str],
+        auth_mode: str):
     """Google Workspace Out-of-Office Message Manager.
     
-    Manage vacation responder settings for Gmail accounts using Google APIs.
+    Supports both OAuth2 (personal accounts) and Service Account (domain-wide) authentication.
+    
+    Examples:
+    \b
+      # OAuth2 mode (opens browser)
+      python main.py status
+      
+      # Service account mode (manage other users)
+      python main.py --service-account sa-key.json --user john@company.com status
+      
+      # Auto-detect authentication method
+      python main.py --auth-mode auto status
     """
     ctx.ensure_object(dict)
     
     # Load configuration
     cfg = Config(config)
     ctx.obj["config"] = cfg
+    ctx.obj["user_email"] = user
     
-    # Initialize authentication
-    creds_file = credentials or cfg.credentials_file
-    token_file = token or cfg.token_file
-    
-    ctx.obj["auth"] = GoogleAuth(creds_file, token_file)
-    ctx.obj["gmail"] = GmailVacationManager(ctx.obj["auth"])
+    try:
+        # Initialize authentication based on mode
+        if auth_mode == 'oauth2':
+            oauth2_file = oauth2_credentials or cfg.credentials_file
+            token_file = token or cfg.token_file
+            auth_handler = AuthManager.create_oauth2_auth(oauth2_file, token_file)
+            
+        elif auth_mode == 'service-account':
+            sa_file = service_account or "service-account-key.json"
+            auth_handler = AuthManager.create_service_account_auth(sa_file)
+            
+        else:  # auto mode
+            oauth2_file = oauth2_credentials or cfg.credentials_file
+            sa_file = service_account or "service-account-key.json"
+            auth_handler = AuthManager.auto_detect_auth_type(oauth2_file, sa_file)
+        
+        ctx.obj["auth"] = auth_handler
+        ctx.obj["gmail"] = GmailVacationManager(auth_handler, user)
+        
+        # Validation for service account mode
+        if isinstance(auth_handler, ServiceAccountAuth) and not user:
+            click.echo("⚠️  Service Account detected but no --user specified.")
+            click.echo("   Service accounts can manage any domain user's settings.")
+            click.echo("   Use --user email@domain.com to specify which user to manage.")
+        
+    except AuthenticationError as e:
+        click.echo(f"❌ Authentication Error: {e}")
+        ctx.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Initialization Error: {e}")
+        ctx.exit(1)
 
 
 @cli.command()
@@ -90,19 +133,25 @@ def set(ctx, subject: Optional[str], message: Optional[str], template: Optional[
                 return
     
     # Set vacation message
-    success = gmail.set_vacation_message(
-        subject=subject,
-        message=message,
-        start_time=start_time,
-        end_time=end_time,
-        contacts_only=contacts_only or config.default_contacts_only,
-        domain_only=domain_only or config.default_domain_only
-    )
+    try:
+        success = gmail.set_vacation_message(
+            subject=subject,
+            message=message,
+            start_time=start_time,
+            end_time=end_time,
+            contacts_only=contacts_only or config.default_contacts_only,
+            domain_only=domain_only or config.default_domain_only
+        )
+        
+        if success:
+            click.echo("✓ Vacation message set successfully!")
+        else:
+            click.echo("✗ Failed to set vacation message.")
     
-    if success:
-        click.echo("✓ Vacation message set successfully!")
-    else:
-        click.echo("✗ Failed to set vacation message.")
+    except AuthenticationError as e:
+        click.echo(f"❌ Authentication Error: {e}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
 
 
 @cli.command()
@@ -111,12 +160,18 @@ def disable(ctx):
     """Disable vacation responder."""
     gmail = ctx.obj["gmail"]
     
-    success = gmail.disable_vacation_message()
+    try:
+        success = gmail.disable_vacation_message()
+        
+        if success:
+            click.echo("✓ Vacation message disabled successfully!")
+        else:
+            click.echo("✗ Failed to disable vacation message.")
     
-    if success:
-        click.echo("✓ Vacation message disabled successfully!")
-    else:
-        click.echo("✗ Failed to disable vacation message.")
+    except AuthenticationError as e:
+        click.echo(f"❌ Authentication Error: {e}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
 
 
 @cli.command()
@@ -124,7 +179,14 @@ def disable(ctx):
 def status(ctx):
     """Show current vacation responder status."""
     gmail = ctx.obj["gmail"]
-    gmail.print_vacation_status()
+    
+    try:
+        gmail.print_vacation_status()
+    
+    except AuthenticationError as e:
+        click.echo(f"❌ Authentication Error: {e}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
 
 
 @cli.command()
@@ -166,14 +228,49 @@ def revoke(ctx):
 @cli.command()
 @click.pass_context
 def reauth(ctx):
-    """Force re-authentication with browser login."""
+    """Force re-authentication (OAuth2 only)."""
     auth = ctx.obj["auth"]
+    
+    if not isinstance(auth, OAuth2Auth):
+        click.echo("❌ Re-authentication only available for OAuth2 mode.")
+        click.echo("   Service accounts use key files and don't need re-authentication.")
+        return
     
     try:
         auth.force_reauthentication()
         click.echo("✓ Re-authentication completed successfully!")
     except Exception as e:
         click.echo(f"✗ Re-authentication failed: {e}")
+
+
+@cli.command()
+@click.pass_context
+def info(ctx):
+    """Show authentication and configuration information."""
+    auth = ctx.obj["auth"]
+    user_email = ctx.obj["user_email"]
+    
+    click.echo("\n=== Configuration Information ===")
+    
+    # Authentication info
+    auth_type = "OAuth2" if isinstance(auth, OAuth2Auth) else "Service Account"
+    click.echo(f"Authentication Type: {auth_type}")
+    
+    if isinstance(auth, OAuth2Auth):
+        click.echo(f"Credentials File: {auth.credentials_file}")
+        click.echo(f"Token File: {auth.token_file}")
+        click.echo("User: Authenticated user (self)")
+    else:
+        click.echo(f"Service Account File: {auth.service_account_file}")
+        if user_email:
+            click.echo(f"Target User: {user_email}")
+        else:
+            click.echo("Target User: Not specified (use --user)")
+    
+    # Scopes
+    click.echo(f"Required Scopes: {', '.join(auth.SCOPES)}")
+    
+    click.echo("=" * 35)
 
 
 def main():

@@ -25,6 +25,8 @@ MANIFEST
 # Google API credentials and tokens
 credentials.json
 token.json
+service-account-key.json
+*-service-account.json
 
 # Environment variables
 .env

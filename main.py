@@ -388,6 +388,56 @@ def troubleshoot(ctx):
         click.echo("4. Try a test user that you're certain is in your domain")
         click.echo("5. Wait 10-15 minutes after making changes")
         
+        # Test service account configuration
+        click.echo(f"\n🧪 TESTING SERVICE ACCOUNT CONFIGURATION:")
+        click.echo("Testing basic service account authentication...")
+        
+        try:
+            # Test loading service account without impersonation
+            creds = auth._base_creds or auth.authenticate()
+            if creds:
+                click.echo("✅ Service account credentials can be loaded")
+                
+                # Test if credentials have a project ID
+                project_id = getattr(creds, 'project_id', None) or sa_data.get('project_id')
+                if project_id:
+                    click.echo(f"📊 Project ID: {project_id}")
+                else:
+                    click.echo("⚠️  No project ID found - this might cause issues")
+                
+                # Check if domain-wide delegation is enabled
+                if hasattr(creds, '_subject'):
+                    click.echo("✅ Credentials support domain-wide delegation")
+                else:
+                    click.echo("ℹ️  Credentials loaded without delegation (normal at this stage)")
+                
+            else:
+                click.echo("❌ Failed to load service account credentials")
+                
+        except Exception as e:
+            click.echo(f"❌ Service account test failed: {e}")
+        
+        click.echo(f"\n🔍 SPECIFIC TROUBLESHOOTING FOR YOUR ERROR:")
+        click.echo("The 'unauthorized_client' error typically means:")
+        click.echo("1. 🆔 Client ID not found in domain-wide delegation")
+        click.echo("2. 🔒 OAuth scope not configured or incorrect")
+        click.echo("3. ⏱️  Configuration not yet propagated (wait 15+ minutes)")
+        click.echo("4. 👤 User not in your Google Workspace domain")
+        click.echo("5. 🛡️  Service account lacks domain-wide delegation checkbox")
+        
+        # Double-check critical configuration
+        click.echo(f"\n✅ DOUBLE-CHECK THESE EXACT VALUES:")
+        click.echo(f"Client ID in Admin Console: {sa_data.get('client_id', 'NOT FOUND')}")
+        click.echo(f"OAuth Scope: https://www.googleapis.com/auth/gmail.settings.basic")
+        click.echo(f"Service Account Email: {sa_data.get('client_email', 'NOT FOUND')}")
+        
+        click.echo(f"\n💡 ALTERNATIVE APPROACHES:")
+        click.echo("1. Try OAuth2 mode first to test if Gmail API works:")
+        click.echo("   python main.py --auth-mode oauth2 status")
+        click.echo("2. Test with a different service account")
+        click.echo("3. Verify domain ownership in Google Search Console")
+        click.echo("4. Check if 2-factor authentication affects admin settings")
+        
     else:  # OAuth2
         click.echo(f"📁 Credentials File: {auth.credentials_file}")
         click.echo(f"📄 Token File: {auth.token_file}")

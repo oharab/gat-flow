@@ -91,12 +91,22 @@ def cli(ctx, config: Optional[str], oauth2_credentials: Optional[str],
 @click.option("--end", help="End date/time (YYYY-MM-DD HH:MM)")
 @click.option("--contacts-only", is_flag=True, help="Only send to contacts")
 @click.option("--domain-only", is_flag=True, help="Only send to same domain users")
+@click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
 def set(ctx, subject: Optional[str], message: Optional[str], template: Optional[str],
-        start: Optional[str], end: Optional[str], contacts_only: bool, domain_only: bool):
+        start: Optional[str], end: Optional[str], contacts_only: bool, domain_only: bool,
+        user: Optional[str]):
     """Set vacation responder message."""
     config = ctx.obj["config"]
-    gmail = ctx.obj["gmail"]
+    
+    # Use command-specific user if provided, otherwise use global user
+    target_user = user or ctx.obj["user_email"]
+    if target_user != ctx.obj["user_email"]:
+        # Create new Gmail manager with different user
+        auth_handler = ctx.obj["auth"]
+        gmail = GmailVacationManager(auth_handler, target_user)
+    else:
+        gmail = ctx.obj["gmail"]
     
     # Use template if specified
     if template:
@@ -161,10 +171,18 @@ def set(ctx, subject: Optional[str], message: Optional[str], template: Optional[
 
 
 @cli.command()
+@click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def disable(ctx):
+def disable(ctx, user: Optional[str]):
     """Disable vacation responder."""
-    gmail = ctx.obj["gmail"]
+    # Use command-specific user if provided, otherwise use global user
+    target_user = user or ctx.obj["user_email"]
+    if target_user != ctx.obj["user_email"]:
+        # Create new Gmail manager with different user
+        auth_handler = ctx.obj["auth"]
+        gmail = GmailVacationManager(auth_handler, target_user)
+    else:
+        gmail = ctx.obj["gmail"]
     
     try:
         success = gmail.disable_vacation_message()
@@ -181,10 +199,18 @@ def disable(ctx):
 
 
 @cli.command()
+@click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def status(ctx):
+def status(ctx, user: Optional[str]):
     """Show current vacation responder status."""
-    gmail = ctx.obj["gmail"]
+    # Use command-specific user if provided, otherwise use global user
+    target_user = user or ctx.obj["user_email"]
+    if target_user != ctx.obj["user_email"]:
+        # Create new Gmail manager with different user
+        auth_handler = ctx.obj["auth"]
+        gmail = GmailVacationManager(auth_handler, target_user)
+    else:
+        gmail = ctx.obj["gmail"]
     
     try:
         gmail.print_vacation_status()

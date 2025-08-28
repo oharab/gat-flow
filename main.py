@@ -310,6 +310,102 @@ def info(ctx):
 
 
 @cli.command()
+@click.pass_context
+def troubleshoot(ctx):
+    """Diagnose common authentication and configuration issues."""
+    
+    click.echo("\n" + "=" * 60)
+    click.echo("🔧 AUTHENTICATION TROUBLESHOOTING")
+    click.echo("=" * 60)
+    
+    # Check authentication type
+    auth = ctx.obj.get("auth")
+    if not auth:
+        click.echo("❌ No authentication handler initialized.")
+        click.echo("   Run with --auth-mode to force authentication type.")
+        return
+    
+    auth_type = "OAuth2" if isinstance(auth, OAuth2Auth) else "Service Account"
+    click.echo(f"\n📋 Authentication Type: {auth_type}")
+    
+    if isinstance(auth, ServiceAccountAuth):
+        click.echo(f"📁 Service Account File: {auth.service_account_file}")
+        
+        # Check if service account file exists and is readable
+        if not auth.service_account_file.exists():
+            click.echo("❌ Service account file not found!")
+            return
+        
+        # Try to read and parse the service account file
+        try:
+            import json
+            with open(auth.service_account_file, 'r') as f:
+                sa_data = json.load(f)
+            
+            click.echo("✅ Service account file found and readable")
+            click.echo(f"📧 Service Account Email: {sa_data.get('client_email', 'NOT FOUND')}")
+            click.echo(f"🆔 Client ID: {sa_data.get('client_id', 'NOT FOUND')}")
+            click.echo(f"🔑 Private Key ID: {sa_data.get('private_key_id', 'NOT FOUND')[:12]}...")
+            
+            # Check critical fields
+            missing_fields = []
+            for field in ['client_email', 'client_id', 'private_key', 'private_key_id']:
+                if not sa_data.get(field):
+                    missing_fields.append(field)
+            
+            if missing_fields:
+                click.echo(f"❌ Missing required fields: {', '.join(missing_fields)}")
+            else:
+                click.echo("✅ All required service account fields present")
+            
+        except json.JSONDecodeError:
+            click.echo("❌ Service account file is not valid JSON")
+            return
+        except Exception as e:
+            click.echo(f"❌ Error reading service account file: {e}")
+            return
+        
+        # Check domain-wide delegation troubleshooting
+        click.echo(f"\n🏢 DOMAIN-WIDE DELEGATION CHECKLIST:")
+        click.echo("□ Service account has 'Enable G Suite Domain-wide Delegation' checked")
+        click.echo("□ Client ID added to Google Workspace Admin Console")
+        click.echo("□ OAuth scope configured: https://www.googleapis.com/auth/gmail.settings.basic")
+        click.echo("□ You have Google Workspace admin privileges")
+        click.echo("□ Target user is in your Google Workspace domain")
+        
+        click.echo(f"\n🔍 COMMON ISSUES:")
+        click.echo("1. Client ID mismatch - ensure exact Client ID from service account")
+        click.echo("2. Wrong OAuth scope - must be exactly:")
+        click.echo("   https://www.googleapis.com/auth/gmail.settings.basic")
+        click.echo("3. Domain mismatch - user must be in your Workspace domain")
+        click.echo("4. Propagation delay - changes can take 10+ minutes to take effect")
+        click.echo("5. Admin privileges - you need super admin or delegated admin rights")
+        
+        click.echo(f"\n📝 VERIFICATION STEPS:")
+        click.echo("1. Google Workspace Admin Console → Security → API Controls")
+        click.echo("2. Domain-wide Delegation → Check your Client ID is listed")
+        click.echo("3. Verify the OAuth scope is exactly as shown above")
+        click.echo("4. Try a test user that you're certain is in your domain")
+        click.echo("5. Wait 10-15 minutes after making changes")
+        
+    else:  # OAuth2
+        click.echo(f"📁 Credentials File: {auth.credentials_file}")
+        click.echo(f"📄 Token File: {auth.token_file}")
+        
+        if not auth.credentials_file.exists():
+            click.echo("❌ OAuth2 credentials file not found!")
+        else:
+            click.echo("✅ OAuth2 credentials file found")
+        
+        if auth.token_file.exists():
+            click.echo("✅ Token file exists (user has authenticated)")
+        else:
+            click.echo("ℹ️  No token file (user hasn't authenticated yet)")
+    
+    click.echo("\n" + "=" * 60)
+
+
+@cli.command()
 @click.option("--type", "-t", type=click.Choice(['oauth2', 'service-account', 'both']), 
               default='both', help="Type of authentication setup to show")
 @click.pass_context

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python script for managing out-of-office messages in Google Workspace using Google APIs. Supports both OAuth2 authentication (personal accounts) and Service Account authentication (domain-wide delegation) for managing vacation responders across multiple users.
+Python script for managing out-of-office messages and delegation in Google Workspace using Google APIs. Supports both OAuth2 authentication (personal accounts) and Service Account authentication (domain-wide delegation) for managing vacation responders and delegates across multiple users.
 
 ## Development Commands
 
@@ -20,6 +20,11 @@ uv run python main.py --service-account sa-key.json --user john@company.com stat
 
 # Auto-detect authentication method
 uv run python main.py --auth-mode auto status
+
+# Delegate management
+uv run python main.py delegates                              # List delegates
+uv run python main.py add-delegate delegate@company.com      # Add delegate
+uv run python main.py remove-delegate delegate@company.com   # Remove delegate
 
 # Run tests
 uv run pytest tests/
@@ -43,7 +48,7 @@ uv run ruff check . && uv run ruff format .
 ## Architecture
 
 - **main.py**: Entry point script with CLI interface supporting both OAuth2 and Service Account authentication
-- **gmail_api.py**: Core Google Gmail API integration for managing vacation settings with user impersonation support
+- **gmail_api.py**: Core Google Gmail API integration for managing vacation settings and delegates with user impersonation support
 - **auth.py**: Flexible authentication system supporting OAuth2 and Service Account with domain-wide delegation
 - **config.py**: Configuration management for API credentials, templates, and default settings
 
@@ -57,7 +62,9 @@ uv run ruff check . && uv run ruff format .
 ### Service Account Setup (Domain-Wide)
 - Service account key file (service-account-key.json) in project root  
 - Domain-wide delegation enabled in Google Workspace Admin Console
-- Required OAuth scopes: `https://www.googleapis.com/auth/gmail.settings.basic`
+- Required OAuth scopes: 
+  - `https://www.googleapis.com/auth/gmail.settings.basic`
+  - `https://www.googleapis.com/auth/gmail.settings.sharing`
 
 ## Authentication Modes
 

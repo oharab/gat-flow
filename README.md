@@ -18,7 +18,7 @@ Supports two authentication modes:
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.13+
 - A Google Cloud project with the Gmail API enabled
 - Credentials for one of the two auth modes (see [Authentication Setup](#authentication-setup))
 

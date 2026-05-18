@@ -1,6 +1,6 @@
 """Core Google Gmail API integration for managing vacation settings."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from googleapiclient.discovery import build
@@ -170,11 +170,15 @@ class GmailVacationManager:
             # Parse timestamps if present
             if "startTime" in settings:
                 start_ms = int(settings["startTime"])
-                status["start_time"] = datetime.fromtimestamp(start_ms / 1000)
+                status["start_time"] = datetime.fromtimestamp(
+                    start_ms / 1000, tz=timezone.utc
+                )
 
             if "endTime" in settings:
                 end_ms = int(settings["endTime"])
-                status["end_time"] = datetime.fromtimestamp(end_ms / 1000)
+                status["end_time"] = datetime.fromtimestamp(
+                    end_ms / 1000, tz=timezone.utc
+                )
 
             return status
 

@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Union
 
+from google.auth.exceptions import GoogleAuthError, RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -82,7 +83,7 @@ class OAuth2Auth(BaseAuth):
                 self._creds.refresh(Request())
                 self._save_token()
                 return self._creds
-            except Exception as e:
+            except RefreshError as e:
                 print(f"Failed to refresh token: {e}")
                 # Fall through to re-authenticate
 
@@ -125,6 +126,11 @@ class OAuth2Auth(BaseAuth):
         if self._creds:
             with open(self.token_file, "w") as token:
                 token.write(self._creds.to_json())
+            try:
+                self.token_file.chmod(0o600)
+            except OSError:
+                # chmod not supported (e.g., Windows); token file content is still written
+                pass
 
     def force_reauthentication(self) -> Credentials:
         """Force re-authentication by clearing existing credentials.
@@ -162,7 +168,7 @@ class OAuth2Auth(BaseAuth):
             self._creds = None
             print("✅ OAuth2 token revoked successfully!")
             return True
-        except Exception as e:
+        except GoogleAuthError as e:
             print(f"❌ Failed to revoke OAuth2 token: {e}")
             return False
 
@@ -210,10 +216,10 @@ class ServiceAccountAuth(BaseAuth):
                     scopes=self.SCOPES,
                 )
                 print("✅ Service account credentials loaded successfully!")
-            except Exception as e:
+            except (OSError, ValueError, GoogleAuthError) as e:
                 raise AuthenticationError(
                     f"Failed to load service account credentials: {e}"
-                )
+                ) from e
 
         # If no user email specified, return base credentials
         if not user_email:
@@ -240,14 +246,14 @@ class ServiceAccountAuth(BaseAuth):
 
             return self._delegated_creds
 
-        except Exception as e:
+        except (RefreshError, GoogleAuthError) as e:
             raise AuthenticationError(
                 f"Failed to impersonate user '{user_email}': {e}\n"
                 "Make sure:\n"
                 "1. Domain-wide delegation is enabled for this service account\n"
                 "2. The service account has the required OAuth scopes\n"
                 "3. The user email is valid and in your domain",
-            )
+            ) from e
 
     def revoke_token(self) -> bool:
         """Service account tokens cannot be revoked like OAuth2 tokens.

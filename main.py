@@ -1,5 +1,6 @@
 """Entry point script for managing Google Workspace out-of-office messages."""
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -9,6 +10,28 @@ import click
 from auth import AuthenticationError, AuthManager, OAuth2Auth, ServiceAccountAuth
 from config import Config
 from gmail_api import GmailVacationManager
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+
+def _validate_email(addr: str) -> str:
+    """Validate an email address, raising ClickException on failure."""
+    if not _EMAIL_RE.match(addr):
+        raise click.ClickException(f"Invalid email address: {addr!r}")
+    return addr
+
+
+def _safe_env_path(file: str) -> Path:
+    """Resolve a user-supplied env file path and reject paths outside cwd."""
+    cwd = Path.cwd().resolve()
+    resolved = Path(file).resolve()
+    try:
+        resolved.relative_to(cwd)
+    except ValueError as e:
+        raise click.ClickException(
+            f"Refusing to access {file!r}: path is outside the project directory."
+        ) from e
+    return resolved
 
 
 def _get_gmail_manager_for_user(ctx, user: Optional[str]) -> GmailVacationManager:
@@ -294,8 +317,13 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
     message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
 
     try:
+        env_path = _safe_env_path(file)
+    except click.ClickException as e:
+        click.echo(f"❌ {e}")
+        return
+
+    try:
         # Read existing .env file or create new one
-        env_path = Path(file)
         existing_content = ""
         if env_path.exists():
             with open(env_path) as f:
@@ -335,7 +363,7 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
             "ℹ️  Restart the application or reload environment to use the new template."
         )
 
-    except Exception as e:
+    except OSError as e:
         click.echo(f"❌ Failed to add template: {e}")
 
 
@@ -351,7 +379,12 @@ def remove_template(ctx, name: str, file: str):
     message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
 
     try:
-        env_path = Path(file)
+        env_path = _safe_env_path(file)
+    except click.ClickException as e:
+        click.echo(f"❌ {e}")
+        return
+
+    try:
         if not env_path.exists():
             click.echo(f"❌ Environment file {file} not found.")
             return
@@ -398,7 +431,7 @@ def remove_template(ctx, name: str, file: str):
 
         click.echo(f"✅ Custom template '{name}' removed from {file}")
 
-    except Exception as e:
+    except OSError as e:
         click.echo(f"❌ Failed to remove template: {e}")
 
 
@@ -777,6 +810,7 @@ def setup(ctx, type: str):
 def add_delegate(ctx, delegate_email: str, user: Optional[str]):
     """Add a delegate to the current user's account."""
     try:
+        delegate_email = _validate_email(delegate_email)
         gmail = _get_gmail_manager_for_user(ctx, user)
     except click.ClickException as e:
         click.echo(f"❌ {e}")
@@ -806,6 +840,7 @@ def add_delegate(ctx, delegate_email: str, user: Optional[str]):
 def remove_delegate(ctx, delegate_email: str, user: Optional[str]):
     """Remove a delegate from the current user's account."""
     try:
+        delegate_email = _validate_email(delegate_email)
         gmail = _get_gmail_manager_for_user(ctx, user)
     except click.ClickException as e:
         click.echo(f"❌ {e}")

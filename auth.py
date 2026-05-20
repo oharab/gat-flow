@@ -3,7 +3,6 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Union
 
 from google.auth.exceptions import GoogleAuthError, RefreshError
 from google.auth.transport.requests import Request
@@ -26,8 +25,9 @@ class BaseAuth(ABC):
 
     @abstractmethod
     def authenticate(
-        self, user_email: Optional[str] = None
-    ) -> Union[Credentials, ServiceAccountCredentials]:
+        self,
+        user_email: str | None = None,
+    ) -> Credentials | ServiceAccountCredentials:
         """Authenticate and return valid credentials."""
 
     @abstractmethod
@@ -39,7 +39,9 @@ class OAuth2Auth(BaseAuth):
     """Handle Google OAuth2 authentication for personal/individual accounts."""
 
     def __init__(
-        self, credentials_file: str = "credentials.json", token_file: str = "token.json"
+        self,
+        credentials_file: str = "credentials.json",
+        token_file: str = "token.json",  # noqa: S107 — filename, not a secret
     ):
         """Initialize OAuth2 authentication handler.
 
@@ -49,9 +51,9 @@ class OAuth2Auth(BaseAuth):
         """
         self.credentials_file = Path(credentials_file)
         self.token_file = Path(token_file)
-        self._creds: Optional[Credentials] = None
+        self._creds: Credentials | None = None
 
-    def authenticate(self, user_email: Optional[str] = None) -> Credentials:
+    def authenticate(self, user_email: str | None = None) -> Credentials:
         """Authenticate and return valid credentials.
 
         Args:
@@ -65,7 +67,7 @@ class OAuth2Auth(BaseAuth):
         """
         if user_email:
             print(
-                "⚠️  OAuth2 mode: user_email parameter ignored (authenticates as logged-in user)"
+                "⚠️  OAuth2 mode: user_email parameter ignored (authenticates as logged-in user)",
             )
 
         if self._creds and self._creds.valid:
@@ -74,7 +76,8 @@ class OAuth2Auth(BaseAuth):
         # Load existing token if available
         if self.token_file.exists():
             self._creds = Credentials.from_authorized_user_file(
-                str(self.token_file), self.SCOPES
+                str(self.token_file),
+                self.SCOPES,
             )
 
         # Refresh token if expired but refresh token exists
@@ -183,12 +186,13 @@ class ServiceAccountAuth(BaseAuth):
             service_account_file: Path to service account JSON key file
         """
         self.service_account_file = Path(service_account_file)
-        self._base_creds: Optional[ServiceAccountCredentials] = None
-        self._delegated_creds: Optional[ServiceAccountCredentials] = None
-        self._current_user_email: Optional[str] = None
+        self._base_creds: ServiceAccountCredentials | None = None
+        self._delegated_creds: ServiceAccountCredentials | None = None
+        self._current_user_email: str | None = None
 
     def authenticate(
-        self, user_email: Optional[str] = None
+        self,
+        user_email: str | None = None,
     ) -> ServiceAccountCredentials:
         """Authenticate using service account with optional user impersonation.
 
@@ -218,7 +222,7 @@ class ServiceAccountAuth(BaseAuth):
                 print("✅ Service account credentials loaded successfully!")
             except (OSError, ValueError, GoogleAuthError) as e:
                 raise AuthenticationError(
-                    f"Failed to load service account credentials: {e}"
+                    f"Failed to load service account credentials: {e}",
                 ) from e
 
         # If no user email specified, return base credentials
@@ -272,7 +276,8 @@ class AuthManager:
 
     @staticmethod
     def create_oauth2_auth(
-        credentials_file: str = "credentials.json", token_file: str = "token.json"
+        credentials_file: str = "credentials.json",
+        token_file: str = "token.json",  # noqa: S107 — filename, not a secret
     ) -> OAuth2Auth:
         """Create OAuth2 authentication handler."""
         return OAuth2Auth(credentials_file, token_file)

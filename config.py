@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Optional
 
 from dotenv import load_dotenv
 
@@ -10,7 +9,7 @@ from dotenv import load_dotenv
 class Config:
     """Configuration handler for the application."""
 
-    def __init__(self, config_file: Optional[str] = None):
+    def __init__(self, config_file: str | None = None):
         """Initialize configuration.
 
         Args:
@@ -59,7 +58,7 @@ class Config:
         """Whether to restrict vacation responses to same domain only by default."""
         return os.getenv("DEFAULT_DOMAIN_ONLY", "false").lower() == "true"
 
-    def get_message_templates(self) -> Dict[str, Dict[str, str]]:
+    def get_message_templates(self) -> dict[str, dict[str, str]]:
         """Get predefined message templates plus any custom templates."""
         templates = {
             "vacation": {
@@ -106,8 +105,9 @@ class Config:
             },
         }
 
-        # Add custom templates from environment variables
-        # Format: CUSTOM_TEMPLATE_<NAME>_SUBJECT and CUSTOM_TEMPLATE_<NAME>_MESSAGE
+        # Add custom templates from environment variables.
+        # Naming convention for env vars: prefix + uppercase name + suffix,
+        # using _SUBJECT and _MESSAGE pairs under the CUSTOM_TEMPLATE_ prefix.
         import re
 
         for key, value in os.environ.items():

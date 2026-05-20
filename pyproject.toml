@@ -30,12 +30,43 @@ build-backend = "hatchling.build"
 packages = ["."]
 
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "ISC", "ICN", "G", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
-ignore = ["S101", "PLR0913", "PLR0912", "PLR0915"]
+ignore = [
+    "S101",     # asserts allowed
+    "PLR0913",  # too many arguments
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+    "T201",     # print() — CLI uses print for user-facing output; logging migration deferred
+    "TRY003",   # long messages in raise — readability over rule
+    "TRY300",   # try/else style — noise
+    "RUF001",   # ambiguous unicode — emojis in user-facing strings are intentional
+    "FBT001",   # boolean positional arg — Click flags are inherently boolean
+    "FBT002",   # boolean default arg — same as above
+    "RUF012",   # mutable class attr SCOPES — intentional
+    "A001",     # `set` is a Click command name; rebinding builtin is intentional
+    "A002",     # `type` as parameter name — Click option name
+    "PLC0415",  # imports not at top of file — local imports are fine
+    "RET504",   # unnecessary assignment before return — readability
+    "SLF001",   # private member access — limited intentional use
+    "PTH107",   # os.remove vs Path.unlink — cosmetic
+    "PTH123",   # open() vs Path.open() — cosmetic
+    "SIM105",   # contextlib.suppress vs try/except — explicit is clearer here
+    "COM812",   # conflicts with ruff formatter
+    "ISC001",   # conflicts with ruff formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = [
+    "BLE001",  # CLI top-level exception handlers intentionally catch Exception
+    "ARG001",  # Click decorators require ctx/user args even if unused
+    "E501",    # long user-facing strings (help text, info messages)
+]
+"auth.py" = ["E501"]    # long user-facing prompt strings
+"config.py" = ["E501"]  # long lines in sample env-file content
 
 [tool.ruff.format]
 quote-style = "double"

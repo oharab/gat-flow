@@ -1,7 +1,6 @@
 """Core Google Gmail API integration for managing vacation settings."""
 
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import UTC, datetime
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -12,7 +11,7 @@ from auth import BaseAuth
 class GmailVacationManager:
     """Manage Gmail vacation responder settings via Google API."""
 
-    def __init__(self, auth_handler: BaseAuth, user_email: Optional[str] = None):
+    def __init__(self, auth_handler: BaseAuth, user_email: str | None = None):
         """Initialize Gmail API client.
 
         Args:
@@ -39,7 +38,7 @@ class GmailVacationManager:
             return self.user_email
         return "me"
 
-    def get_vacation_settings(self) -> Dict:
+    def get_vacation_settings(self) -> dict:
         """Get current vacation responder settings.
 
         Returns:
@@ -49,12 +48,7 @@ class GmailVacationManager:
             HttpError: If API request fails
         """
         try:
-            settings = (
-                self.service.users()
-                .settings()
-                .getVacation(userId=self.user_id)
-                .execute()
-            )
+            settings = self.service.users().settings().getVacation(userId=self.user_id).execute()
             return settings
         except HttpError as error:
             print(f"An error occurred getting vacation settings: {error}")
@@ -64,8 +58,8 @@ class GmailVacationManager:
         self,
         subject: str,
         message: str,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
         contacts_only: bool = False,
         domain_only: bool = False,
     ) -> bool:
@@ -103,15 +97,10 @@ class GmailVacationManager:
             vacation_settings["endTime"] = str(end_ms)
 
         try:
-            result = (
-                self.service.users()
-                .settings()
-                .updateVacation(
-                    userId=self.user_id,
-                    body=vacation_settings,
-                )
-                .execute()
-            )
+            self.service.users().settings().updateVacation(
+                userId=self.user_id,
+                body=vacation_settings,
+            ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
             print(f"Vacation message set successfully{user_info}.")
@@ -150,7 +139,7 @@ class GmailVacationManager:
             print(f"An error occurred disabling vacation message: {error}")
             return False
 
-    def get_vacation_status(self) -> Dict:
+    def get_vacation_status(self) -> dict:
         """Get vacation responder status and details.
 
         Returns:
@@ -171,13 +160,15 @@ class GmailVacationManager:
             if "startTime" in settings:
                 start_ms = int(settings["startTime"])
                 status["start_time"] = datetime.fromtimestamp(
-                    start_ms / 1000, tz=timezone.utc
+                    start_ms / 1000,
+                    tz=UTC,
                 )
 
             if "endTime" in settings:
                 end_ms = int(settings["endTime"])
                 status["end_time"] = datetime.fromtimestamp(
-                    end_ms / 1000, tz=timezone.utc
+                    end_ms / 1000,
+                    tz=UTC,
                 )
 
             return status
@@ -206,7 +197,7 @@ class GmailVacationManager:
 
             if "start_time" in status:
                 print(
-                    f"Start Time: {status['start_time'].strftime('%Y-%m-%d %H:%M:%S')}"
+                    f"Start Time: {status['start_time'].strftime('%Y-%m-%d %H:%M:%S')}",
                 )
 
             if "end_time" in status:
@@ -228,16 +219,10 @@ class GmailVacationManager:
         }
 
         try:
-            result = (
-                self.service.users()
-                .settings()
-                .delegates()
-                .create(
-                    userId=self.user_id,
-                    body=delegate_body,
-                )
-                .execute()
-            )
+            self.service.users().settings().delegates().create(
+                userId=self.user_id,
+                body=delegate_body,
+            ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
             print(f"Delegate {delegate_email} added successfully{user_info}.")
@@ -247,7 +232,7 @@ class GmailVacationManager:
             print(f"An error occurred creating delegate: {error}")
             return False
 
-    def get_delegates(self) -> Dict:
+    def get_delegates(self) -> dict:
         """Get list of current delegates.
 
         Returns:
@@ -258,11 +243,7 @@ class GmailVacationManager:
         """
         try:
             delegates = (
-                self.service.users()
-                .settings()
-                .delegates()
-                .list(userId=self.user_id)
-                .execute()
+                self.service.users().settings().delegates().list(userId=self.user_id).execute()
             )
             return delegates
         except HttpError as error:

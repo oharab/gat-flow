@@ -3,7 +3,6 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -29,12 +28,12 @@ def _safe_env_path(file: str) -> Path:
         resolved.relative_to(cwd)
     except ValueError as e:
         raise click.ClickException(
-            f"Refusing to access {file!r}: path is outside the project directory."
+            f"Refusing to access {file!r}: path is outside the project directory.",
         ) from e
     return resolved
 
 
-def _get_gmail_manager_for_user(ctx, user: Optional[str]) -> GmailVacationManager:
+def _get_gmail_manager_for_user(ctx, user: str | None) -> GmailVacationManager:
     """Get Gmail manager for specified user, with service account validation."""
     auth_handler = ctx.obj["auth"]
     target_user = user or ctx.obj["user_email"]
@@ -58,7 +57,9 @@ def _get_gmail_manager_for_user(ctx, user: Optional[str]) -> GmailVacationManage
 @click.option("--service-account", help="Path to service account key JSON file")
 @click.option("--token", help="Path to OAuth2 token file")
 @click.option(
-    "--user", "-u", help="Email of user to manage (required for service account)"
+    "--user",
+    "-u",
+    help="Email of user to manage (required for service account)",
 )
 @click.option(
     "--auth-mode",
@@ -69,11 +70,11 @@ def _get_gmail_manager_for_user(ctx, user: Optional[str]) -> GmailVacationManage
 @click.pass_context
 def cli(
     ctx,
-    config: Optional[str],
-    oauth2_credentials: Optional[str],
-    service_account: Optional[str],
-    token: Optional[str],
-    user: Optional[str],
+    config: str | None,
+    oauth2_credentials: str | None,
+    service_account: str | None,
+    token: str | None,
+    user: str | None,
     auth_mode: str,
 ):
     """Google Workspace Out-of-Office Message Manager.
@@ -147,14 +148,14 @@ def cli(
 @click.pass_context
 def set(
     ctx,
-    subject: Optional[str],
-    message: Optional[str],
-    template: Optional[str],
-    start: Optional[str],
-    end: Optional[str],
+    subject: str | None,
+    message: str | None,
+    template: str | None,
+    start: str | None,
+    end: str | None,
     contacts_only: bool,
     domain_only: bool,
-    user: Optional[str],
+    user: str | None,
 ):
     """Set vacation responder message."""
     config = ctx.obj["config"]
@@ -185,25 +186,27 @@ def set(
     start_time = None
     end_time = None
 
-    if start:
-        try:
-            start_time = datetime.strptime(start, "%Y-%m-%d %H:%M")
-        except ValueError:
+    local_tz = datetime.now().astimezone().tzinfo
+
+    def _parse(value: str) -> datetime | None:
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
             try:
-                start_time = datetime.strptime(start, "%Y-%m-%d")
+                return datetime.strptime(value, fmt).replace(tzinfo=local_tz)
             except ValueError:
-                click.echo(f"Invalid start date format: {start}")
-                return
+                continue
+        return None
+
+    if start:
+        start_time = _parse(start)
+        if start_time is None:
+            click.echo(f"Invalid start date format: {start}")
+            return
 
     if end:
-        try:
-            end_time = datetime.strptime(end, "%Y-%m-%d %H:%M")
-        except ValueError:
-            try:
-                end_time = datetime.strptime(end, "%Y-%m-%d")
-            except ValueError:
-                click.echo(f"Invalid end date format: {end}")
-                return
+        end_time = _parse(end)
+        if end_time is None:
+            click.echo(f"Invalid end date format: {end}")
+            return
 
     # Set vacation message
     try:
@@ -230,7 +233,7 @@ def set(
 @cli.command()
 @click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def disable(ctx, user: Optional[str]):
+def disable(ctx, user: str | None):
     """Disable vacation responder."""
     try:
         gmail = _get_gmail_manager_for_user(ctx, user)
@@ -255,7 +258,7 @@ def disable(ctx, user: Optional[str]):
 @cli.command()
 @click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def status(ctx, user: Optional[str]):
+def status(ctx, user: str | None):
     """Show current vacation responder status."""
     try:
         gmail = _get_gmail_manager_for_user(ctx, user)
@@ -308,7 +311,7 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
     # Validate template name
     if not name.replace("_", "").replace("-", "").isalnum():
         click.echo(
-            "❌ Template name must contain only letters, numbers, hyphens, and underscores."
+            "❌ Template name must contain only letters, numbers, hyphens, and underscores.",
         )
         return
 
@@ -339,10 +342,7 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
             lines = existing_content.split("\n")
             filtered_lines = []
             for line in lines:
-                if not (
-                    line.startswith(subject_var + "=")
-                    or line.startswith(message_var + "=")
-                ):
+                if not line.startswith((subject_var + "=", message_var + "=")):
                     filtered_lines.append(line)
             existing_content = "\n".join(filtered_lines)
 
@@ -360,7 +360,7 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
         click.echo(f"✅ Custom template '{name}' added to {file}")
         click.echo(f"📝 Use it with: python main.py set --template {name.lower()}")
         click.echo(
-            "ℹ️  Restart the application or reload environment to use the new template."
+            "ℹ️  Restart the application or reload environment to use the new template.",
         )
 
     except OSError as e:
@@ -407,9 +407,7 @@ def remove_template(ctx, name: str, file: str):
                 continue
 
             # Skip template variable lines
-            if line_stripped.startswith(subject_var + "=") or line_stripped.startswith(
-                message_var + "="
-            ):
+            if line_stripped.startswith((subject_var + "=", message_var + "=")):
                 found_template = True
                 continue
 
@@ -456,7 +454,7 @@ def reauth(ctx):
     if not isinstance(auth, OAuth2Auth):
         click.echo("❌ Re-authentication only available for OAuth2 mode.")
         click.echo(
-            "   Service accounts use key files and don't need re-authentication."
+            "   Service accounts use key files and don't need re-authentication.",
         )
         return
 
@@ -533,11 +531,11 @@ def troubleshoot(ctx):
 
             click.echo("✅ Service account file found and readable")
             click.echo(
-                f"📧 Service Account Email: {sa_data.get('client_email', 'NOT FOUND')}"
+                f"📧 Service Account Email: {sa_data.get('client_email', 'NOT FOUND')}",
             )
             click.echo(f"🆔 Client ID: {sa_data.get('client_id', 'NOT FOUND')}")
             click.echo(
-                f"🔑 Private Key ID: {sa_data.get('private_key_id', 'NOT FOUND')[:12]}..."
+                f"🔑 Private Key ID: {sa_data.get('private_key_id', 'NOT FOUND')[:12]}...",
             )
 
             # Check critical fields
@@ -561,25 +559,25 @@ def troubleshoot(ctx):
         # Check domain-wide delegation troubleshooting
         click.echo("\n🏢 DOMAIN-WIDE DELEGATION CHECKLIST:")
         click.echo(
-            "□ Service account has 'Enable G Suite Domain-wide Delegation' checked"
+            "□ Service account has 'Enable G Suite Domain-wide Delegation' checked",
         )
         click.echo("□ Client ID added to Google Workspace Admin Console")
         click.echo(
-            "□ OAuth scope configured: https://www.googleapis.com/auth/gmail.settings.basic"
+            "□ OAuth scope configured: https://www.googleapis.com/auth/gmail.settings.basic",
         )
         click.echo("□ You have Google Workspace admin privileges")
         click.echo("□ Target user is in your Google Workspace domain")
 
         click.echo("\n🔍 COMMON ISSUES:")
         click.echo(
-            "1. Client ID mismatch - ensure exact Client ID from service account"
+            "1. Client ID mismatch - ensure exact Client ID from service account",
         )
         click.echo("2. Wrong OAuth scope - must be exactly:")
         click.echo("   https://www.googleapis.com/auth/gmail.settings.basic")
         click.echo("3. Domain mismatch - user must be in your Workspace domain")
         click.echo("4. Propagation delay - changes can take 10+ minutes to take effect")
         click.echo(
-            "5. Admin privileges - you need super admin or delegated admin rights"
+            "5. Admin privileges - you need super admin or delegated admin rights",
         )
 
         click.echo("\n📝 VERIFICATION STEPS:")
@@ -601,7 +599,7 @@ def troubleshoot(ctx):
 
                 # Test if credentials have a project ID
                 project_id = getattr(creds, "project_id", None) or sa_data.get(
-                    "project_id"
+                    "project_id",
                 )
                 if project_id:
                     click.echo(f"📊 Project ID: {project_id}")
@@ -613,7 +611,7 @@ def troubleshoot(ctx):
                     click.echo("✅ Credentials support domain-wide delegation")
                 else:
                     click.echo(
-                        "ℹ️  Credentials loaded without delegation (normal at this stage)"
+                        "ℹ️  Credentials loaded without delegation (normal at this stage)",
                     )
 
             else:
@@ -633,7 +631,7 @@ def troubleshoot(ctx):
         # Double-check critical configuration
         click.echo("\n✅ DOUBLE-CHECK THESE EXACT VALUES:")
         click.echo(
-            f"Client ID in Admin Console: {sa_data.get('client_id', 'NOT FOUND')}"
+            f"Client ID in Admin Console: {sa_data.get('client_id', 'NOT FOUND')}",
         )
         click.echo("OAuth Scope: https://www.googleapis.com/auth/gmail.settings.basic")
         click.echo(f"Service Account Email: {sa_data.get('client_email', 'NOT FOUND')}")
@@ -723,14 +721,14 @@ def setup(ctx, type: str):
         click.echo("\n🏢 SERVICE ACCOUNT SETUP (Domain-Wide Management)")
         click.echo("-" * 55)
         click.echo(
-            "Use this method to manage vacation settings for any user in your domain."
+            "Use this method to manage vacation settings for any user in your domain.",
         )
         click.echo("⚠️  Requires Google Workspace admin privileges!")
         click.echo()
 
         click.echo("1️⃣  CREATE SERVICE ACCOUNT:")
         click.echo(
-            "   • In Google Cloud Console, go to 'IAM & Admin' → 'Service Accounts'"
+            "   • In Google Cloud Console, go to 'IAM & Admin' → 'Service Accounts'",
         )
         click.echo("   • Click '+ CREATE SERVICE ACCOUNT'")
         click.echo("   • Name: 'gmail-vacation-manager' (or your choice)")
@@ -743,13 +741,13 @@ def setup(ctx, type: str):
         click.echo("   • Go to 'Keys' tab → 'ADD KEY' → 'Create new key'")
         click.echo("   • Key type: JSON → Click 'Create'")
         click.echo(
-            "   • Save the JSON file as 'service-account-key.json' in this directory"
+            "   • Save the JSON file as 'service-account-key.json' in this directory",
         )
         click.echo()
 
         click.echo("3️⃣  ENABLE DOMAIN-WIDE DELEGATION:")
         click.echo(
-            "   • In the service account details, check 'Enable G Suite Domain-wide Delegation'"
+            "   • In the service account details, check 'Enable G Suite Domain-wide Delegation'",
         )
         click.echo("   • Product name: 'Gmail Vacation Manager'")
         click.echo("   • Click 'Save'")
@@ -761,14 +759,14 @@ def setup(ctx, type: str):
         click.echo("   • Navigate to: Security → API Controls → Domain-wide Delegation")
         click.echo("   • Click 'Add new' → Enter the Client ID from step 3")
         click.echo(
-            "   • OAuth Scopes: https://www.googleapis.com/auth/gmail.settings.basic"
+            "   • OAuth Scopes: https://www.googleapis.com/auth/gmail.settings.basic",
         )
         click.echo("   • Click 'Authorize'")
         click.echo()
 
         click.echo("✅ Service Account Setup Complete!")
         click.echo(
-            "   Run: python main.py --service-account service-account-key.json --user user@domain.com status"
+            "   Run: python main.py --service-account service-account-key.json --user user@domain.com status",
         )
 
     click.echo("\n" + "=" * 60)
@@ -777,7 +775,7 @@ def setup(ctx, type: str):
     if type in ["oauth2", "both"]:
         click.echo("• credentials.json          (OAuth2 client credentials)")
         click.echo(
-            "• token.json               (Auto-generated after first OAuth2 login)"
+            "• token.json               (Auto-generated after first OAuth2 login)",
         )
     if type in ["service-account", "both"]:
         click.echo("• service-account-key.json (Service account private key)")
@@ -787,17 +785,17 @@ def setup(ctx, type: str):
     click.echo("-" * 15)
     click.echo("• Run 'python main.py info' to see current authentication status")
     click.echo(
-        "• Use 'python main.py --auth-mode auto' to auto-detect authentication method"
+        "• Use 'python main.py --auth-mode auto' to auto-detect authentication method",
     )
     click.echo()
 
     click.echo("❓ NEED HELP?")
     click.echo("-" * 12)
     click.echo(
-        "• OAuth2 issues: Make sure Gmail API is enabled and OAuth consent is configured"
+        "• OAuth2 issues: Make sure Gmail API is enabled and OAuth consent is configured",
     )
     click.echo(
-        "• Service Account issues: Verify domain-wide delegation is properly configured"
+        "• Service Account issues: Verify domain-wide delegation is properly configured",
     )
     click.echo("• Both: Check that JSON files are valid and in the correct directory")
     click.echo("\n" + "=" * 60)
@@ -807,7 +805,7 @@ def setup(ctx, type: str):
 @click.argument("delegate_email")
 @click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def add_delegate(ctx, delegate_email: str, user: Optional[str]):
+def add_delegate(ctx, delegate_email: str, user: str | None):
     """Add a delegate to the current user's account."""
     try:
         delegate_email = _validate_email(delegate_email)
@@ -822,7 +820,7 @@ def add_delegate(ctx, delegate_email: str, user: Optional[str]):
         if success:
             click.echo(f"✓ Delegate {delegate_email} added successfully!")
             click.echo(
-                "ℹ️  Note: The delegate will receive an email invitation and must accept it before gaining access."
+                "ℹ️  Note: The delegate will receive an email invitation and must accept it before gaining access.",
             )
         else:
             click.echo(f"✗ Failed to add delegate {delegate_email}.")
@@ -837,7 +835,7 @@ def add_delegate(ctx, delegate_email: str, user: Optional[str]):
 @click.argument("delegate_email")
 @click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def remove_delegate(ctx, delegate_email: str, user: Optional[str]):
+def remove_delegate(ctx, delegate_email: str, user: str | None):
     """Remove a delegate from the current user's account."""
     try:
         delegate_email = _validate_email(delegate_email)
@@ -863,7 +861,7 @@ def remove_delegate(ctx, delegate_email: str, user: Optional[str]):
 @cli.command()
 @click.option("--user", help="Email of user to manage (overrides global --user)")
 @click.pass_context
-def delegates(ctx, user: Optional[str]):
+def delegates(ctx, user: str | None):
     """List current delegates for the user's account."""
     try:
         gmail = _get_gmail_manager_for_user(ctx, user)

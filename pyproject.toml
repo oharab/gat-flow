@@ -67,6 +67,11 @@ ignore = [
 ]
 "auth.py" = ["E501"]    # long user-facing prompt strings
 "config.py" = ["E501"]  # long lines in sample env-file content
+"tests/*" = [
+    "ARG002",   # pytest fixtures may be used for side effects only
+    "PLR2004",  # magic numbers in test assertions are usually expected values
+    "S105",     # hardcoded strings in tests are not real secrets
+]
 
 [tool.ruff.format]
 quote-style = "double"

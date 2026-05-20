@@ -1,36 +1,13 @@
 """Entry point script for managing Google Workspace out-of-office messages."""
 
-import re
 from datetime import datetime
-from pathlib import Path
 
 import click
 
 from auth import AuthenticationError, AuthManager, OAuth2Auth, ServiceAccountAuth
 from config import Config
 from gmail_api import GmailVacationManager
-
-_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
-
-
-def _validate_email(addr: str) -> str:
-    """Validate an email address, raising ClickException on failure."""
-    if not _EMAIL_RE.match(addr):
-        raise click.ClickException(f"Invalid email address: {addr!r}")
-    return addr
-
-
-def _safe_env_path(file: str) -> Path:
-    """Resolve a user-supplied env file path and reject paths outside cwd."""
-    cwd = Path.cwd().resolve()
-    resolved = Path(file).resolve()
-    try:
-        resolved.relative_to(cwd)
-    except ValueError as e:
-        raise click.ClickException(
-            f"Refusing to access {file!r}: path is outside the project directory.",
-        ) from e
-    return resolved
+from validators import parse_user_datetime, safe_env_path, validate_email
 
 
 def _get_gmail_manager_for_user(ctx, user: str | None) -> GmailVacationManager:
@@ -188,22 +165,14 @@ def set(
 
     local_tz = datetime.now().astimezone().tzinfo
 
-    def _parse(value: str) -> datetime | None:
-        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(value, fmt).replace(tzinfo=local_tz)
-            except ValueError:
-                continue
-        return None
-
     if start:
-        start_time = _parse(start)
+        start_time = parse_user_datetime(start, local_tz)
         if start_time is None:
             click.echo(f"Invalid start date format: {start}")
             return
 
     if end:
-        end_time = _parse(end)
+        end_time = parse_user_datetime(end, local_tz)
         if end_time is None:
             click.echo(f"Invalid end date format: {end}")
             return
@@ -320,7 +289,7 @@ def add_template(ctx, name: str, subject: str, message: str, file: str):
     message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
 
     try:
-        env_path = _safe_env_path(file)
+        env_path = safe_env_path(file)
     except click.ClickException as e:
         click.echo(f"❌ {e}")
         return
@@ -379,7 +348,7 @@ def remove_template(ctx, name: str, file: str):
     message_var = f"CUSTOM_TEMPLATE_{template_name}_MESSAGE"
 
     try:
-        env_path = _safe_env_path(file)
+        env_path = safe_env_path(file)
     except click.ClickException as e:
         click.echo(f"❌ {e}")
         return
@@ -808,7 +777,7 @@ def setup(ctx, type: str):
 def add_delegate(ctx, delegate_email: str, user: str | None):
     """Add a delegate to the current user's account."""
     try:
-        delegate_email = _validate_email(delegate_email)
+        delegate_email = validate_email(delegate_email)
         gmail = _get_gmail_manager_for_user(ctx, user)
     except click.ClickException as e:
         click.echo(f"❌ {e}")
@@ -819,9 +788,10 @@ def add_delegate(ctx, delegate_email: str, user: str | None):
 
         if success:
             click.echo(f"✓ Delegate {delegate_email} added successfully!")
-            click.echo(
-                "ℹ️  Note: The delegate will receive an email invitation and must accept it before gaining access.",
-            )
+            if not isinstance(ctx.obj["auth"], ServiceAccountAuth):
+                click.echo(
+                    "ℹ️  Note: The delegate will receive an email invitation and must accept it before gaining access.",
+                )
         else:
             click.echo(f"✗ Failed to add delegate {delegate_email}.")
 
@@ -838,7 +808,7 @@ def add_delegate(ctx, delegate_email: str, user: str | None):
 def remove_delegate(ctx, delegate_email: str, user: str | None):
     """Remove a delegate from the current user's account."""
     try:
-        delegate_email = _validate_email(delegate_email)
+        delegate_email = validate_email(delegate_email)
         gmail = _get_gmail_manager_for_user(ctx, user)
     except click.ClickException as e:
         click.echo(f"❌ {e}")

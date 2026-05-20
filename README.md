@@ -231,6 +231,22 @@ Common issues:
 - **Delegate command fails with 403** — the `gmail.settings.sharing` scope isn't authorized for the service account.
 - **`Invalid grant` (OAuth2)** — run `uv run python main.py revoke` then retry.
 
+## Development
+
+```bash
+uv sync --extra dev          # install pytest, ruff, etc.
+uv run pytest                # unit tests only (fast, no network, no auth)
+uv run pytest -m integration # integration tests (HttpMockSequence against real client)
+uv run ruff check .
+uv run ruff format .
+```
+
+Test layout:
+
+- `tests/unit/` — pure-logic tests, no API or filesystem dependencies. Run by default.
+- `tests/integration/` — exercise `gmail_api.py` against `googleapiclient.http.HttpMockSequence` so the real Google client handles URL construction and parameter validation. Skipped by default; opt in with `-m integration`.
+- `tests/fixtures/gmail-discovery-v1.json` — vendored Gmail v1 discovery doc, not currently loaded at test time (the client ships its own static copy) but kept for reference.
+
 ## Security
 
 - Service account keys and OAuth tokens stay on your machine; nothing is sent anywhere except Google's API.

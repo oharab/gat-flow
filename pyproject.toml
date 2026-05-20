@@ -76,3 +76,8 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires Gmail API discovery fixture; deselected unless run with -m integration",
+]

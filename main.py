@@ -1,5 +1,7 @@
 """Entry point script for managing Google Workspace out-of-office messages."""
 
+import logging
+import sys
 from datetime import datetime
 
 import click
@@ -8,6 +10,27 @@ from auth import AuthenticationError, AuthManager, OAuth2Auth, ServiceAccountAut
 from config import Config
 from gmail_api import GmailVacationManager
 from validators import parse_user_datetime, safe_env_path, validate_email
+
+
+def _configure_logging(verbose: bool, quiet: bool) -> None:
+    """Configure root logging for the CLI.
+
+    Defaults to INFO so the existing progress messages stay visible.
+    ``-v`` enables DEBUG; ``-q`` raises the floor to WARNING.
+    Logs go to stderr so stdout stays clean for command output.
+    """
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    level = logging.DEBUG if verbose else logging.WARNING if quiet else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        stream=sys.stderr,
+    )
+    # Silence noisy third-party logs unless --verbose.
+    if not verbose:
+        for noisy in ("googleapiclient", "google.auth", "urllib3"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def _get_gmail_manager_for_user(ctx, user: str | None) -> GmailVacationManager:
@@ -44,6 +67,10 @@ def _get_gmail_manager_for_user(ctx, user: str | None) -> GmailVacationManager:
     default="auto",
     help="Authentication mode to use",
 )
+@click.option("-v", "--verbose", is_flag=True, help="Show debug-level log output")
+@click.option(
+    "-q", "--quiet", is_flag=True, help="Suppress info messages; only warnings and errors"
+)
 @click.pass_context
 def cli(
     ctx,
@@ -53,6 +80,8 @@ def cli(
     token: str | None,
     user: str | None,
     auth_mode: str,
+    verbose: bool,
+    quiet: bool,
 ):
     """Google Workspace Out-of-Office Message Manager.
 
@@ -70,6 +99,7 @@ def cli(
       python main.py --auth-mode auto status
     """
     ctx.ensure_object(dict)
+    _configure_logging(verbose=verbose, quiet=quiet)
 
     # Load configuration
     cfg = Config(config)

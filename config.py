@@ -1,9 +1,12 @@
 """Configuration management for API credentials and default settings."""
 
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -149,5 +152,5 @@ DEFAULT_DOMAIN_ONLY=false
         with open(file_path, "w") as f:
             f.write(sample_content)
 
-        print(f"Sample environment file created: {file_path}")
-        print("Copy this to '.env' and customize the values as needed.")
+        logger.info("Sample environment file created: %s", file_path)
+        logger.info("Copy this to '.env' and customize the values as needed.")

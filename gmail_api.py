@@ -1,11 +1,14 @@
 """Core Google Gmail API integration for managing vacation settings."""
 
+import logging
 from datetime import UTC, datetime
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from auth import BaseAuth
+
+logger = logging.getLogger(__name__)
 
 
 class GmailVacationManager:
@@ -50,8 +53,8 @@ class GmailVacationManager:
         try:
             settings = self.service.users().settings().getVacation(userId=self.user_id).execute()
             return settings
-        except HttpError as error:
-            print(f"An error occurred getting vacation settings: {error}")
+        except HttpError:
+            logger.exception("An error occurred getting vacation settings")
             raise
 
     def set_vacation_message(
@@ -103,16 +106,16 @@ class GmailVacationManager:
             ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
-            print(f"Vacation message set successfully{user_info}.")
+            logger.info("Vacation message set successfully%s.", user_info)
             if start_time:
-                print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("Start time: %s", start_time.strftime("%Y-%m-%d %H:%M:%S"))
             if end_time:
-                print(f"End time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("End time: %s", end_time.strftime("%Y-%m-%d %H:%M:%S"))
 
             return True
 
-        except HttpError as error:
-            print(f"An error occurred setting vacation message: {error}")
+        except HttpError:
+            logger.exception("An error occurred setting vacation message")
             return False
 
     def disable_vacation_message(self) -> bool:
@@ -132,11 +135,11 @@ class GmailVacationManager:
             ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
-            print(f"Vacation message disabled successfully{user_info}.")
+            logger.info("Vacation message disabled successfully%s.", user_info)
             return True
 
-        except HttpError as error:
-            print(f"An error occurred disabling vacation message: {error}")
+        except HttpError:
+            logger.exception("An error occurred disabling vacation message")
             return False
 
     def get_vacation_status(self) -> dict:
@@ -173,8 +176,8 @@ class GmailVacationManager:
 
             return status
 
-        except HttpError as error:
-            print(f"An error occurred getting vacation status: {error}")
+        except HttpError:
+            logger.exception("An error occurred getting vacation status")
             return {}
 
     def print_vacation_status(self) -> None:
@@ -225,11 +228,15 @@ class GmailVacationManager:
             ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
-            print(f"Delegate {delegate_email} added successfully{user_info}.")
+            logger.info(
+                "Delegate %s added successfully%s.",
+                delegate_email,
+                user_info,
+            )
             return True
 
-        except HttpError as error:
-            print(f"An error occurred creating delegate: {error}")
+        except HttpError:
+            logger.exception("An error occurred creating delegate")
             return False
 
     def get_delegates(self) -> dict:
@@ -246,8 +253,8 @@ class GmailVacationManager:
                 self.service.users().settings().delegates().list(userId=self.user_id).execute()
             )
             return delegates
-        except HttpError as error:
-            print(f"An error occurred getting delegates: {error}")
+        except HttpError:
+            logger.exception("An error occurred getting delegates")
             raise
 
     def delete_delegate(self, delegate_email: str) -> bool:
@@ -266,11 +273,15 @@ class GmailVacationManager:
             ).execute()
 
             user_info = f" for {self.user_email}" if self.user_email else ""
-            print(f"Delegate {delegate_email} removed successfully{user_info}.")
+            logger.info(
+                "Delegate %s removed successfully%s.",
+                delegate_email,
+                user_info,
+            )
             return True
 
-        except HttpError as error:
-            print(f"An error occurred deleting delegate: {error}")
+        except HttpError:
+            logger.exception("An error occurred deleting delegate")
             return False
 
     def print_delegates_status(self) -> None:
@@ -293,6 +304,6 @@ class GmailVacationManager:
 
             print("========================\n")
 
-        except HttpError as error:
-            print(f"Could not retrieve delegate information: {error}")
+        except HttpError:
+            logger.exception("Could not retrieve delegate information")
             print("========================\n")

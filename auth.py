@@ -1,5 +1,6 @@
 """Google authentication handling supporting both OAuth2 and Service Account flows."""
 
+import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -9,6 +10,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+
+logger = logging.getLogger(__name__)
 
 
 class AuthenticationError(Exception):
@@ -66,8 +69,8 @@ class OAuth2Auth(BaseAuth):
             AuthenticationError: If authentication fails
         """
         if user_email:
-            print(
-                "⚠️  OAuth2 mode: user_email parameter ignored (authenticates as logged-in user)",
+            logger.warning(
+                "OAuth2 mode: user_email parameter ignored (authenticates as logged-in user)",
             )
 
         if self._creds and self._creds.valid:
@@ -87,7 +90,7 @@ class OAuth2Auth(BaseAuth):
                 self._save_token()
                 return self._creds
             except RefreshError as e:
-                print(f"Failed to refresh token: {e}")
+                logger.warning("Failed to refresh token: %s", e)
                 # Fall through to re-authenticate
 
         # Perform OAuth2 flow if no valid credentials
@@ -98,13 +101,11 @@ class OAuth2Auth(BaseAuth):
                     "Please download it from Google Cloud Console.",
                 )
 
-            print("🔐 OAuth2 Authentication required for Google Gmail API access")
-            print("📋 Required permissions: Gmail settings management")
-            print("🌐 Opening browser for Google OAuth2 authentication...")
-            print("   - Please sign in with your Google Workspace account")
-            print("   - Grant permission to manage Gmail vacation settings")
-            print("   - Close the browser tab when authentication is complete")
-            print()
+            logger.info(
+                "OAuth2 authentication required — opening browser. "
+                "Sign in with your Google Workspace account and grant Gmail "
+                "settings permission. Close the browser tab when complete.",
+            )
 
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(self.credentials_file),
@@ -120,7 +121,7 @@ class OAuth2Auth(BaseAuth):
             )
 
             self._save_token()
-            print("✅ OAuth2 authentication successful! Token saved for future use.")
+            logger.info("OAuth2 authentication successful; token saved for future use.")
 
         return self._creds
 
@@ -141,13 +142,13 @@ class OAuth2Auth(BaseAuth):
         Returns:
             Fresh Google OAuth2 credentials object
         """
-        print("🔄 Forcing OAuth2 re-authentication...")
+        logger.info("Forcing OAuth2 re-authentication.")
 
         # Clear existing credentials
         self._creds = None
         if self.token_file.exists():
             os.remove(self.token_file)
-            print(f"Removed existing token file: {self.token_file}")
+            logger.info("Removed existing token file: %s", self.token_file)
 
         # Re-authenticate
         return self.authenticate()
@@ -159,20 +160,20 @@ class OAuth2Auth(BaseAuth):
             True if token was successfully revoked, False otherwise
         """
         if not self._creds:
-            print("No active OAuth2 credentials to revoke.")
+            logger.info("No active OAuth2 credentials to revoke.")
             return False
 
         try:
-            print("🔓 Revoking Google OAuth2 access token...")
+            logger.info("Revoking Google OAuth2 access token.")
             self._creds.revoke(Request())
             if self.token_file.exists():
                 os.remove(self.token_file)
-                print(f"Removed token file: {self.token_file}")
+                logger.info("Removed token file: %s", self.token_file)
             self._creds = None
-            print("✅ OAuth2 token revoked successfully!")
+            logger.info("OAuth2 token revoked successfully.")
             return True
-        except GoogleAuthError as e:
-            print(f"❌ Failed to revoke OAuth2 token: {e}")
+        except GoogleAuthError:
+            logger.exception("Failed to revoke OAuth2 token")
             return False
 
 
@@ -213,13 +214,13 @@ class ServiceAccountAuth(BaseAuth):
 
         # Load base service account credentials if not already loaded
         if not self._base_creds:
-            print("🔐 Loading service account credentials...")
+            logger.info("Loading service account credentials.")
             try:
                 self._base_creds = ServiceAccountCredentials.from_service_account_file(
                     str(self.service_account_file),
                     scopes=self.SCOPES,
                 )
-                print("✅ Service account credentials loaded successfully!")
+                logger.info("Service account credentials loaded successfully.")
             except (OSError, ValueError, GoogleAuthError) as e:
                 raise AuthenticationError(
                     f"Failed to load service account credentials: {e}",
@@ -227,7 +228,7 @@ class ServiceAccountAuth(BaseAuth):
 
         # If no user email specified, return base credentials
         if not user_email:
-            print("ℹ️  Using service account credentials without impersonation")
+            logger.info("Using service account credentials without impersonation.")
             return self._base_creds
 
         # If same user as before, return cached delegated credentials
@@ -239,14 +240,14 @@ class ServiceAccountAuth(BaseAuth):
             return self._delegated_creds
 
         # Create delegated credentials for the specified user
-        print(f"👤 Impersonating user: {user_email}")
+        logger.info("Impersonating user: %s", user_email)
         try:
             self._delegated_creds = self._base_creds.with_subject(user_email)
             self._current_user_email = user_email
 
             # Test the credentials by refreshing them
             self._delegated_creds.refresh(Request())
-            print("✅ User impersonation successful!")
+            logger.info("User impersonation successful.")
 
             return self._delegated_creds
 
@@ -265,9 +266,11 @@ class ServiceAccountAuth(BaseAuth):
         Returns:
             False (service account tokens are not revokable)
         """
-        print("ℹ️  Service account credentials cannot be revoked.")
-        print("   To disable access, remove the service account key file or")
-        print("   disable domain-wide delegation in Google Workspace Admin Console.")
+        logger.info(
+            "Service account credentials cannot be revoked. To disable access, "
+            "remove the key file or disable domain-wide delegation in the "
+            "Google Workspace Admin Console.",
+        )
         return False
 
 
@@ -306,10 +309,10 @@ class AuthManager:
         sa_path = Path(service_account_file)
 
         if sa_path.exists():
-            print(f"🔍 Detected service account file: {service_account_file}")
+            logger.info("Detected service account file: %s", service_account_file)
             return AuthManager.create_service_account_auth(service_account_file)
         if oauth2_path.exists():
-            print(f"🔍 Detected OAuth2 credentials file: {oauth2_file}")
+            logger.info("Detected OAuth2 credentials file: %s", oauth2_file)
             return AuthManager.create_oauth2_auth(oauth2_file)
         raise AuthenticationError(
             f"No authentication files found. Please provide either:\n"

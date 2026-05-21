@@ -40,7 +40,6 @@ ignore = [
     "PLR0913",  # too many arguments
     "PLR0912",  # too many branches
     "PLR0915",  # too many statements
-    "T201",     # print() — CLI uses print for user-facing output; logging migration deferred
     "TRY003",   # long messages in raise — readability over rule
     "TRY300",   # try/else style — noise
     "RUF001",   # ambiguous unicode — emojis in user-facing strings are intentional
@@ -66,6 +65,10 @@ ignore = [
     "E501",    # long user-facing strings (help text, info messages)
 ]
 "auth.py" = ["E501"]    # long user-facing prompt strings
+"gmail_api.py" = [
+    "T201",  # print() retained in print_vacation_status/print_delegates_status
+             # for presentational output (the CLI surfaces it directly)
+]
 "config.py" = ["E501"]  # long lines in sample env-file content
 "tests/*" = [
     "ARG002",   # pytest fixtures may be used for side effects only
